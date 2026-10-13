@@ -22,6 +22,7 @@ input,select{background:var(--bg);border:1px solid var(--bd);border-radius:8px;p
 .auth{max-width:380px;margin:8vh auto;text-align:center}.auth img{height:70px;background:#fff;border-radius:6px;padding:4px;margin-bottom:10px}
 .auth .form{grid-template-columns:1fr;text-align:left}.er{color:var(--er);font-size:13px;min-height:18px}a{color:var(--ac);cursor:pointer}
 footer{text-align:center;color:var(--mu);font-size:12px;padding:24px 16px}
+.od{color:var(--er);font-size:12px;font-weight:600}input[type=datetime-local]{padding:4px 6px;font-size:13px}
 </style></head><body>
 <div id="app"></div>
 <footer>© 2026 Khaled Abdelhady. All rights reserved.</footer>
@@ -70,16 +71,28 @@ function gate(){app.innerHTML='<div class="auth card"><img src="logo.png"><h2>No
 const nm=i=>S.users.find(u=>u.id===i)?.name||"Member",pn=id=>S.projects.find(p=>p.id===id)?.name||"—";
 function render(){if(!me)return;lead=S.users.find(u=>u.id===me.id)?.role==="leader";
  app.innerHTML=`<header><img src="${esc(S.cfg.logo||"logo.png")}"><h1>${esc(S.cfg.name||"ECG")}<small>Team Task &amp; Project Platform</small></h1><span class="mu">${esc(me.name)} · ${lead?"Team Leader":"Member"}</span>
- ${lead?'<button class="btn g s" id="set">⚙ Settings</button>':""}<button class="btn g s" id="out">Sign out</button></header><main><nav>${[["mine","My Tasks"],["all","All Tasks"],["proj","Projects"],["team","Team"]].map(([k,l])=>`<button class="tab ${tab===k?"on":""}" data-t="${k}">${l}</button>`).join("")}</nav><div id="v">${tab==="proj"?projView():tab==="team"?teamView():taskView()}</div></main>`;
+ ${lead?'<button class="btn g s" id="set">⚙ Settings</button>':""}<button class="btn g s" id="out">Sign out</button></header><main><nav>${[["mine","My Tasks"],["all","All Tasks"],["proj","Projects"],["team","Team"],["dash","Dashboard"]].map(([k,l])=>`<button class="tab ${tab===k?"on":""}" data-t="${k}">${l}</button>`).join("")}</nav><div id="v">${tab==="proj"?projView():tab==="team"?teamView():tab==="dash"?dashView():taskView()}</div></main>`;
  $("#out").onclick=()=>signOut(auth);document.querySelectorAll("[data-t]").forEach(b=>b.onclick=()=>{tab=b.dataset.t;render()});bind()}
+const fmt=x=>x?new Date(x).toLocaleString("en-GB",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"}):"";
+const nowIso=()=>{const d=new Date();d.setMinutes(d.getMinutes()-d.getTimezoneOffset());return d.toISOString().slice(0,16)};
+function avail(id){const o=S.tasks.filter(t=>t.assignee===id&&t.status!=="done");if(!o.length)return{free:true,txt:"🟢 Free"};
+ const e=o.map(t=>t.eta).filter(Boolean);return{free:false,txt:"🔴 Busy ("+o.length+")"+(e.length===o.length?" · free after "+fmt(e.sort().pop()):"")}}
+let lbRange="all";
+function dashView(){const A=S.users.filter(m=>m.status==="approved"),since=lbRange==="week"?new Date(Date.now()-7*864e5).toISOString():"";
+ const rows=A.map(m=>({m,a:avail(m.id),done:S.tasks.filter(t=>t.assignee===m.id&&t.status==="done"&&(!since||(t.doneAt&&t.doneAt>since))).length}));
+ const av=[...rows].sort((x,y)=>y.a.free-x.a.free||x.m.name.localeCompare(y.m.name)),lb=[...rows].sort((x,y)=>y.done-x.done),mx=Math.max(1,...lb.map(r=>r.done)),fr=rows.filter(r=>r.a.free).length;
+ return `<div class="card"><div class="row"><b class="sp">Availability</b><span class="mu">${fr} free · ${rows.length-fr} busy</span></div>`+av.map(r=>`<div class="row" style="margin-top:8px"><span class="sp">${esc(r.m.name)}</span><span class="mu">${r.a.txt}</span></div>`).join("")+`</div>
+ <div class="card"><div class="row"><b class="sp">Leaderboard — tasks completed</b><select id="lbr"><option value="all" ${lbRange==="all"?"selected":""}>All time</option><option value="week" ${lbRange==="week"?"selected":""}>Last 7 days</option></select></div>`+lb.map((r,i)=>`<div style="margin-top:10px"><div class="row"><span>${["🥇","🥈","🥉"][i]||(i+1)+"."} ${esc(r.m.name)}</span><span class="sp"></span><b>${r.done}</b></div><div class="bar"><i style="width:${r.done/mx*100}%"></i></div></div>`).join("")+`</div>`}
 function taskCard(t){const mine=t.assignee===me.id;return `<div class="card ${t.status==="done"?"done":""}"><div class="row"><b class="t sp">${esc(t.title)}</b><span class="tag">${esc(pn(t.projectId))}</span></div>
- <div class="row mu" style="margin-top:6px"><span>👤 ${esc(nm(t.assignee))}</span>${t.due?`<span>📅 ${esc(t.due)}</span>`:""}<span class="sp"></span>
+ <div class="row mu" style="margin-top:6px"><span>👤 ${esc(nm(t.assignee))}</span>${t.due?`<span>📅 Due ${esc(t.due)}</span>`:""}
+ ${t.status==="done"?(t.doneAt?`<span class="st-done">✔ ${fmt(t.doneAt)}</span>`:""):((mine||lead)?`<label>⏰ Finish by <input type="datetime-local" data-eta="${t.id}" value="${esc(t.eta||"")}"></label>`:`<span>${t.eta?"⏰ "+fmt(t.eta):"⏳ No time set"}</span>`)}
+ ${t.status!=="done"&&t.eta&&t.eta<nowIso()?'<span class="od">Overdue</span>':""}${t.status!=="done"&&!t.eta&&mine?'<span class="od">Set your finish time</span>':""}<span class="sp"></span>
  ${(mine||lead)?`<select data-st="${t.id}">${Object.entries(ST).map(([k,l])=>`<option value="${k}" ${t.status===k?"selected":""}>${l}</option>`).join("")}</select>`:`<span class="st-${t.status}">${ST[t.status]}</span>`}
  ${lead?`<button class="btn g s" data-del="${t.id}">Delete</button>`:""}</div></div>`}
 function taskView(){let l=S.tasks.filter(t=>tab==="all"||t.assignee===me.id);if(pf!=="all")l=l.filter(t=>t.projectId===pf);
  const o={todo:0,prog:1,done:2};l.sort((a,b)=>o[a.status]-o[b.status]);const open=S.projects.filter(p=>p.status!=="closed");let h="";
  if(lead)h+=`<div class="card"><b>Assign a new task</b><div class="form" style="margin-top:8px"><input id="nt" placeholder="Task title"><select id="np">${open.map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join("")||'<option value="">Create a project first</option>'}</select>
- <select id="na">${S.users.filter(m=>m.status==="approved").map(m=>`<option value="${m.id}">${esc(m.name)}</option>`).join("")}</select><input id="nd" type="date"><button class="btn" id="add">Assign</button></div></div>`;
+ <select id="na">${S.users.filter(m=>m.status==="approved").map(m=>`<option value="${m.id}">${esc(m.name)} — ${avail(m.id).txt}</option>`).join("")}</select><input id="nd" type="date"><button class="btn" id="add">Assign</button></div></div>`;
  h+=`<div class="row" style="margin-bottom:10px"><span class="mu">Project:</span><select id="pf"><option value="all">All</option>${S.projects.map(p=>`<option value="${p.id}" ${pf===p.id?"selected":""}>${esc(p.name)}</option>`).join("")}</select></div>`;
  return h+(l.map(taskCard).join("")||'<div id="msg">No tasks here.</div>')}
 function projView(){let h=lead?`<div class="card row"><input id="pnm" class="sp" placeholder="New project name"><button class="btn" id="padd">Add project</button></div>`:"";
@@ -88,15 +101,17 @@ function projView(){let h=lead?`<div class="card row"><input id="pnm" class="sp"
 function teamView(){const A=S.users.filter(m=>m.status==="approved");let h="";
  if(lead)h+=`<div class="card"><b>Add a team member</b><div class="form" style="margin-top:8px"><input id="mn" placeholder="Full name"><input id="mem" type="email" placeholder="name${DOMAIN}"><input id="mp" type="text" placeholder="Password (min 6)"><button class="btn" id="addm">Add member</button></div><div class="er" id="mer"></div></div>`;
  return h+A.map(m=>{const o=S.tasks.filter(t=>t.assignee===m.id&&t.status!=="done").length;
-  return `<div class="card row"><b class="sp">${esc(m.name)}</b><span class="mu">${esc(m.email)}</span><span class="mu">${o} open tasks</span>`+(lead&&m.id!==me.id?`<select data-role="${m.id}"><option value="member" ${m.role!=="leader"?"selected":""}>Member</option><option value="leader" ${m.role==="leader"?"selected":""}>Team Leader</option></select><button class="btn g s" data-rm="${m.id}">Remove</button>`:`<span class="tag">${m.role==="leader"?"Team Leader":"Member"}</span>`)+`</div>`}).join("")}
+  return `<div class="card row"><b class="sp">${esc(m.name)}</b><span class="mu">${esc(m.email)}</span><span class="mu">${avail(m.id).txt}</span>`+(lead&&m.id!==me.id?`<select data-role="${m.id}"><option value="member" ${m.role!=="leader"?"selected":""}>Member</option><option value="leader" ${m.role==="leader"?"selected":""}>Team Leader</option></select><button class="btn g s" data-rm="${m.id}">Remove</button>`:`<span class="tag">${m.role==="leader"?"Team Leader":"Member"}</span>`)+`</div>`}).join("")}
 const q=s=>document.querySelector(s),w=async f=>{try{await f()}catch(e){alert(e.message)}};
 function bind(){const pfe=q("#pf");if(pfe)pfe.onchange=()=>{pf=pfe.value;render()};
- document.querySelectorAll("[data-st]").forEach(e=>e.onchange=()=>w(()=>updateDoc(doc(db,"tasks",e.dataset.st),{status:e.value})));
+ document.querySelectorAll("[data-st]").forEach(e=>e.onchange=()=>w(()=>updateDoc(doc(db,"tasks",e.dataset.st),{status:e.value,doneAt:e.value==="done"?new Date().toISOString():""})));
  document.querySelectorAll("[data-del]").forEach(e=>e.onclick=()=>confirm("Delete this task?")&&w(()=>deleteDoc(doc(db,"tasks",e.dataset.del))));
  document.querySelectorAll("[data-tg]").forEach(e=>e.onclick=()=>{const p=S.projects.find(x=>x.id===e.dataset.tg);w(()=>updateDoc(doc(db,"projects",p.id),{status:p.status==="closed"?"open":"closed"}))});
  document.querySelectorAll("[data-role]").forEach(e=>e.onchange=()=>w(()=>updateDoc(doc(db,"users",e.dataset.role),{role:e.value})));
  document.querySelectorAll("[data-ap]").forEach(e=>e.onclick=()=>w(()=>updateDoc(doc(db,"users",e.dataset.ap),{status:"approved"})));
  document.querySelectorAll("[data-rj]").forEach(e=>e.onclick=()=>w(()=>updateDoc(doc(db,"users",e.dataset.rj),{status:"rejected"})));
+ document.querySelectorAll("[data-eta]").forEach(e=>e.onchange=()=>w(()=>updateDoc(doc(db,"tasks",e.dataset.eta),{eta:e.value})));
+ const lr=q("#lbr");if(lr)lr.onchange=()=>{lbRange=lr.value;render()};
  const am=q("#addm");if(am)am.onclick=async()=>{const n=q("#mn").value.trim(),e=q("#mem").value.trim().toLowerCase(),p=q("#mp").value,er=q("#mer");er.textContent="";
   if(!n||!e||p.length<6)return er.textContent="Enter a name, an email and a password of at least 6 characters.";
   if(!e.endsWith(DOMAIN))return er.textContent="Email must end with "+DOMAIN;
@@ -107,7 +122,7 @@ function bind(){const pfe=q("#pf");if(pfe)pfe.onchange=()=>{pf=pfe.value;render(
   am.disabled=false};
  document.querySelectorAll("[data-rm]").forEach(e=>e.onclick=()=>confirm("Remove this person's access?")&&w(()=>deleteDoc(doc(db,"users",e.dataset.rm))));
  const a=q("#add");if(a)a.onclick=()=>{const t=q("#nt").value.trim(),p=q("#np").value,s=q("#na").value;if(!t||!p||!s)return alert("Enter a title and pick a project and a person");
-  w(()=>setDoc(doc(db,"tasks",uid()),{title:t,projectId:p,assignee:s,due:q("#nd").value,status:"todo",by:me.id}))};
+  w(()=>setDoc(doc(db,"tasks",uid()),{title:t,projectId:p,assignee:s,due:q("#nd").value,status:"todo",eta:"",doneAt:"",by:me.id}))};
  const pa=q("#padd");if(pa)pa.onclick=()=>{const n=q("#pnm").value.trim();if(n)w(()=>setDoc(doc(db,"projects",uid()),{name:n,status:"open"}))};
  const st=q("#set");if(st)st.onclick=()=>{const n=prompt("Company name:",S.cfg.name||"ECG");if(n===null)return;const f=document.createElement("input");f.type="file";f.accept="image/*";
   const save=l=>w(()=>setDoc(doc(db,"settings","company"),{name:n.trim()||"ECG",logo:l||S.cfg.logo||""}));
